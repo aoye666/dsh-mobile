@@ -6,7 +6,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-class DshEngineManager private constructor(private val context: Context) {
+class DshEngineManager @Inject constructor(private val context: Context) {
 
     companion object {
         private const val TAG = "DshEngineManager"

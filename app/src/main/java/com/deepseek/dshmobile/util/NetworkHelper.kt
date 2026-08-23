@@ -14,7 +14,7 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
-class NetworkHelper(private val context: Context) {
+class NetworkHelper @javax.inject.Inject constructor(private val context: Context) {
 
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
