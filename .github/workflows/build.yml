@@ -30,6 +30,13 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Download gradlew script
+        run: |
+          GRADLE_VERSION="8.11.1"
+          GRADLE_URL="https://raw.githubusercontent.com/gradle/gradle/v${GRADLE_VERSION}/gradlew"
+          curl -L "$GRADLE_URL" -o gradlew
+          chmod +x gradlew
+
       - name: Download Node.js Android ARM64
         run: |
           mkdir -p app/src/main/assets/engine
