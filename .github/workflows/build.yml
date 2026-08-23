@@ -1,0 +1,110 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:  # 允许手动触发
+
+env:
+  NODE_VERSION: '22.11.0'
+  DSH_PACKAGE: '@deepseek-ai/dsh'
+  DSH_VERSION: 'latest'
+
+jobs:
+  build:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Download Node.js Android ARM64
+        run: |
+          mkdir -p app/src/main/assets/engine
+          NODE_URL="https://nodejs.org/dist/v${{ env.NODE_VERSION }}/node-v${{ env.NODE_VERSION }}-linux-arm64.tar.gz"
+          echo "Downloading Node.js from $NODE_URL"
+          curl -L "$NODE_URL" -o node-android.tar.gz
+          tar -xzf node-android.tar.gz
+          cp node-v${{ env.NODE_VERSION }}-linux-arm64/bin/node app/src/main/assets/engine/node
+          chmod +x app/src/main/assets/engine/node
+          rm -rf node-android.tar.gz node-v${{ env.NODE_VERSION }}-linux-arm64
+          echo "Node.js binary prepared:"
+          ls -la app/src/main/assets/engine/
+
+      - name: Prepare dsh CLI files
+        run: |
+          mkdir -p app/src/main/assets/engine
+          
+          # 下载 dsh npm 包
+          echo "Downloading dsh package..."
+          npm pack ${{ env.DSH_PACKAGE }}@${{ env.DSH_VERSION }} 2>/dev/null
+          
+          DSH_TGZ=$(ls ${{ env.DSH_PACKAGE }}-*.tgz 2>/dev/null | head -1)
+          if [ -z "$DSH_TGZ" ]; then
+            DSH_TGZ=$(ls deepseek-ai-dsh-*.tgz 2>/dev/null | head -1)
+          fi
+          
+          if [ -n "$DSH_TGZ" ]; then
+            echo "Extracting $DSH_TGZ"
+            mkdir -p /tmp/dsh-extract
+            tar -xzf "$DSH_TGZ" -C /tmp/dsh-extract
+            rm -f "$DSH_TGZ"
+            
+            # 复制 lib 目录文件
+            if [ -d "/tmp/dsh-extract/package/lib" ]; then
+              cp -r /tmp/dsh-extract/package/lib/* app/src/main/assets/engine/
+            fi
+            
+            # 复制 config 目录
+            if [ -d "/tmp/dsh-extract/package/config" ]; then
+              mkdir -p app/src/main/assets/engine/config
+              cp -r /tmp/dsh-extract/package/config/* app/src/main/assets/engine/config/
+            fi
+            
+            rm -rf /tmp/dsh-extract
+          else
+            echo "Warning: Could not download dsh package, creating placeholder"
+          fi
+          
+          # 创建 dsh 包装脚本
+          cat > app/src/main/assets/engine/dsh << 'SCRIPT'
+          #!/bin/bash
+          SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          exec "$SCRIPT_DIR/node" "$SCRIPT_DIR/bin.js" "$@"
+          SCRIPT
+          chmod +x app/src/main/assets/engine/dsh
+          
+          echo "Engine assets prepared:"
+          ls -la app/src/main/assets/engine/
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-mobile-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+
+      - name: Create GitHub Release (manual dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: app/build/outputs/apk/debug/*.apk
+          tag_name: v${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          generate_release_notes: true
