@@ -163,7 +163,7 @@ class DshEngineManager private constructor(private val context: Context) {
                 conn.connectTimeout = 30_000
                 conn.readTimeout = 60_000
 
-                val body = """{"content":${""$content""},${"sessionId":"$sessionId"}"""
+                val body = """{"content":"$content","sessionId":"$sessionId"}"""
                 conn.outputStream.use { it.write(body.toByteArray()) }
 
                 val responseCode = conn.responseCode
